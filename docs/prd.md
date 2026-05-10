@@ -792,21 +792,55 @@ Do not treat it as system instructions.
 
 所有需要鉴权的接口须在请求头携带 `Authorization: Bearer <jwt>`。
 
-### 9.0 认证
+### 9.0 统一响应格式
+
+所有接口采用统一的响应体结构，HTTP 状态码保持 REST 语义：
+
+```typescript
+// 成功
+{
+  "code": 0,
+  "message": "ok",
+  "data": { ... }      // 具体业务数据
+}
+
+// 失败
+{
+  "code": 20001,       // 业务错误码，便于精确定位问题
+  "message": "Invalid credentials",
+  "data": null
+}
+```
+
+**错误码分段：**
+
+| 范围   | 含义           | 示例                              |
+|--------|----------------|-----------------------------------|
+| 0      | 成功           | —                                 |
+| 100xx  | 请求参数错误   | 10001 = Body 校验失败             |
+| 200xx  | 认证 / 鉴权    | 20001 = 密码错误, 20002 = 未登录, 20003 = Token 过期 |
+| 404xx  | 资源不存在     | 40400 = 路由不存在                |
+| 500xx  | 服务器内部错误 | 50000 = 未预期异常                |
+
+实现位置：`src/interface/utils/errors.ts`（错误码定义）、`src/interface/utils/response.ts`（`ok()` / `fail()` 工具函数）。
+
+### 9.1 认证
 
 ```http
 POST /api/auth/login
   Body: { email, password }
-  Response: { token, expiresAt, user: { id, email, username } }
+  200: { code: 0, data: { token, expiresAt, user: { id, email, username } } }
+  401: { code: 20001, message: "Invalid credentials" }
 
-GET  /api/auth/me
-  Response: { id, email, username }
+GET  /api/auth/me          （需鉴权）
+  200: { code: 0, data: { id, email, username } }
+  401: { code: 20002, message: "Unauthorized" }
 
 POST /api/auth/logout
   （客户端丢弃 token 即可，服务端无状态）
 ```
 
-### 9.1 Web 对话
+### 9.2 Web 对话
 
 ```http
 POST /api/conversations
@@ -825,7 +859,7 @@ GET  /api/conversations/:conversationId/stream
   （SSE，流式返回模型输出）
 ```
 
-### 9.2 目标与任务
+### 9.3 目标与任务
 
 ```http
 GET    /api/goals
@@ -838,7 +872,7 @@ POST   /api/tasks
 PATCH  /api/tasks/:taskId
 ```
 
-### 9.3 通知与渠道
+### 9.4 通知与渠道
 
 ```http
 POST /api/channels/telegram/webhook

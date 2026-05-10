@@ -1,3 +1,23 @@
 .claude/
 .DS_Store
 LICENSE
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Prisma
+prisma/*.db
+
+/src/generated/prisma
