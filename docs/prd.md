@@ -981,3 +981,30 @@ context_assembly_events(user_id, session_id, stable_prefix_hash, created_at)
 | 敏感字段加密密钥 | `.env`（`FIELD_ENCRYPTION_KEY`）+ 严格 `.gitignore` |
 | compact 阈值 | DeepSeek v4 上下文 1M tokens，MVP 只做手动 `/compact`，自动 compact 推迟 |
 | stable prefix 版本号 | 推迟，等真实遇到 cache hit ratio 问题时再加 |
+
+## 14. 产品代办
+
+### 14.1 Memory 检索鲁棒性
+
+背景：
+
+流式测试中，agent 已经先调用 `memory-read`，但因为工具参数为 `{ "type": "称呼" }`，而已保存的 memory type 为 `自我称呼`，当前精确 type 过滤返回空结果。随后当 agent 不传 type、读取全量 memory 时，可以正确回答“我应当称呼自己为小柴胡”。
+
+结论：
+
+当前问题不是 agent loop 或 SSE 工具事件链路失败，而是 `memory-read` 的检索契约过于依赖模型生成完全一致的 `type`。模型天然会生成近义分类，因此长期记忆读取不能只依赖精确 type 匹配。
+
+改进方向：
+
+- MVP：将 `memory-read` 入参从仅支持 `{ type?: string }` 扩展为 `{ query?: string, type?: string, limit?: number }`。
+- MVP：当传入 `type` 精确匹配无结果时，自动 fallback 到 `type contains` 和 `content contains` 的模糊查询。
+- MVP：在工具描述中明确建议“若不确定 type，优先传 query 或不传 type”，减少模型误用精确分类。
+- 中期：定义规范化 memory 类型，例如 `self_identity`、`user_preference`、`user_fact`、`interaction_rule`，写入时将模型生成的自然语言 type 映射到规范类型。
+- 中期：增加 type alias 机制，例如 `称呼`、`自称`、`名字` 都映射到 `self_identity`。
+- 后期：引入 embedding / semantic search，用语义相关性检索长期记忆，type 只作为过滤条件，不作为主要召回手段。
+
+验收标准：
+
+- 已保存 `type=自我称呼`、内容包含“小柴胡”的 memory 后，用户询问“你应该怎么称呼自己”时，agent 流式响应中应先出现 `memory-read` 工具事件，并最终回答“小柴胡”。
+- 当模型调用 `memory-read` 使用 `{ "type": "称呼" }` 时，工具不应直接返回空结果；应通过 fallback 命中 `自我称呼` 相关 memory。
+- ToolCall 记录中应能看到本次 memory-read 的输入、fallback 策略和最终命中的 memory ids，便于调试检索质量。

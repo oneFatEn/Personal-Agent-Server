@@ -10,6 +10,7 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   DEEPSEEK_API_KEY: z.string().optional(),
   FIELD_ENCRYPTION_KEY: z.string().optional(),
+  AGENT_MAX_ITERATIONS: z.coerce.number().int().positive().default(10),
 });
 
 const result = schema.safeParse(process.env);

@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { prisma } from './infrastructure/database/prisma.js';
 import { UserRepository } from './infrastructure/database/UserRepository.js';
 import authPlugin from './interface/plugins/auth.js';
+import agentRoutes from './interface/routes/agent.js';
 import authRoutes from './interface/routes/auth.js';
 import chatRoutes from './interface/routes/chat.js';
 import { AppCode } from './interface/utils/errors.js';
@@ -24,6 +25,7 @@ export async function buildServer() {
   // Routes
   await server.register(authRoutes, { userRepository });
   await server.register(chatRoutes);
+  await server.register(agentRoutes);
 
   // Health check
   server.get('/health', async () => {

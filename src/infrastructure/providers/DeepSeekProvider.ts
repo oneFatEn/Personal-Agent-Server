@@ -3,6 +3,7 @@ import type {
   CompletionRequest,
   CompletionResponse,
   IModelProvider,
+  Message,
   StreamChunk,
   TokenUsage,
 } from '../../domain/providers/IModelProvider.js';
@@ -25,6 +26,38 @@ function mapUsage(usage: {
   };
 }
 
+function mapMessages(messages: Message[]) {
+  return messages.map((message) => {
+    if (message.role === 'tool') {
+      return {
+        role: 'tool' as const,
+        content: message.content,
+        tool_call_id: message.toolCallId ?? '',
+      };
+    }
+
+    if (message.role === 'assistant' && message.toolCalls?.length) {
+      return {
+        role: 'assistant' as const,
+        content: message.content || null,
+        tool_calls: message.toolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          type: 'function' as const,
+          function: {
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          },
+        })),
+      };
+    }
+
+    return {
+      role: message.role,
+      content: message.content,
+    };
+  });
+}
+
 export class DeepSeekProvider implements IModelProvider {
   private readonly client: OpenAI;
 
@@ -42,21 +75,29 @@ export class DeepSeekProvider implements IModelProvider {
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
     const response = await this.client.chat.completions.create({
       model: request.model,
-      messages: request.messages,
+      messages: mapMessages(request.messages),
+      tools: request.tools,
       stream: false,
     });
+    const message = response.choices[0]?.message;
 
     return {
-      content: response.choices[0]?.message.content ?? '',
+      content: message?.content ?? '',
       model: response.model,
       usage: mapUsage(response.usage),
+      toolCalls: message?.tool_calls?.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: toolCall.function.arguments,
+      })),
     };
   }
 
   async *stream(request: CompletionRequest): AsyncIterable<StreamChunk> {
     const stream = await this.client.chat.completions.create({
       model: request.model,
-      messages: request.messages,
+      messages: mapMessages(request.messages),
+      tools: request.tools,
       stream: true,
       stream_options: { include_usage: true },
     });
